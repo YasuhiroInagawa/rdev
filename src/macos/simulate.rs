@@ -292,17 +292,22 @@ unsafe fn get_current_mouse_location() -> Option<CGPoint> {
 }
 
 /// kCGKeyboardEventKeyboardType: without it macOS treats injected key events as
-/// ANSI, so a JIS keyboard's symbols come out wrong. Override with RDEV_KBD_TYPE.
+/// ANSI, so a JIS keyboard's symbols come out wrong.
+/// LMGetKbdType() is unreliable in a server process started at boot by the launchd
+/// service (it reports ANSI), so default to JIS. RDEV_KBD_TYPE overrides it:
+/// a number (e.g. 40 = ANSI) or "auto" to ask the system.
 const KEYBOARD_EVENT_KEYBOARD_TYPE: u32 = 10;
+const KEYBOARD_TYPE_JIS: i64 = 42;
 
 fn set_keyboard_type(cg_event: &CGEvent, event_type: &EventType) {
     if !matches!(event_type, EventType::KeyPress(_) | EventType::KeyRelease(_)) {
         return;
     }
-    let kb_type = std::env::var("RDEV_KBD_TYPE")
-        .ok()
-        .and_then(|v| v.parse::<i64>().ok())
-        .unwrap_or_else(|| unsafe { crate::macos::common::LMGetKbdType() } as i64);
+    let kb_type = match std::env::var("RDEV_KBD_TYPE") {
+        Ok(v) if v == "auto" => unsafe { crate::macos::common::LMGetKbdType() } as i64,
+        Ok(v) => v.parse::<i64>().unwrap_or(KEYBOARD_TYPE_JIS),
+        Err(_) => KEYBOARD_TYPE_JIS,
+    };
     cg_event.set_integer_value_field(KEYBOARD_EVENT_KEYBOARD_TYPE, kb_type);
 }
 
