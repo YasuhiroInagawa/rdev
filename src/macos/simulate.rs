@@ -304,7 +304,7 @@ fn set_keyboard_type(cg_event: &CGEvent, event_type: &EventType) {
         return;
     }
     let kb_type = match std::env::var("RDEV_KBD_TYPE") {
-        Ok(v) if v == "auto" => unsafe { crate::macos::common::LMGetKbdType() } as i64,
+        Ok(v) if v == "auto" => (unsafe { crate::macos::common::LMGetKbdType() }) as i64,
         Ok(v) => v.parse::<i64>().unwrap_or(KEYBOARD_TYPE_JIS),
         Err(_) => KEYBOARD_TYPE_JIS,
     };
