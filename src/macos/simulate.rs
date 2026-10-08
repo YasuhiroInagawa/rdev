@@ -291,10 +291,26 @@ unsafe fn get_current_mouse_location() -> Option<CGPoint> {
     Some(event.location())
 }
 
+/// kCGKeyboardEventKeyboardType: without it macOS treats injected key events as
+/// ANSI, so a JIS keyboard's symbols come out wrong. Override with RDEV_KBD_TYPE.
+const KEYBOARD_EVENT_KEYBOARD_TYPE: u32 = 10;
+
+fn set_keyboard_type(cg_event: &CGEvent, event_type: &EventType) {
+    if !matches!(event_type, EventType::KeyPress(_) | EventType::KeyRelease(_)) {
+        return;
+    }
+    let kb_type = std::env::var("RDEV_KBD_TYPE")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or_else(|| unsafe { crate::macos::common::LMGetKbdType() } as i64);
+    cg_event.set_integer_value_field(KEYBOARD_EVENT_KEYBOARD_TYPE, kb_type);
+}
+
 pub fn simulate(event_type: &EventType) -> Result<(), SimulateError> {
     unsafe {
         if let Some(cg_event) = convert_native(event_type) {
             cg_event.set_integer_value_field(EventField::EVENT_SOURCE_USER_DATA, MOUSE_EXTRA_INFO);
+            set_keyboard_type(&cg_event, event_type);
             cg_event.post(CGEventTapLocation::HID);
             if matches!(
                 event_type,
@@ -333,6 +349,7 @@ impl VirtualInput {
     pub fn simulate(&self, event_type: &EventType) -> Result<(), SimulateError> {
         unsafe {
             if let Some(cg_event) = convert_native_with_source(event_type, self.source.clone()) {
+                set_keyboard_type(&cg_event, event_type);
                 cg_event.post(self.tap_loc);
                 if matches!(
                     event_type,
